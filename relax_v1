@@ -1,0 +1,101 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+def nn(box,i,j):
+    # takes in an array and a 'coordinate'
+    # returns the sum of the nearest neighbors
+    return box[i-1,j] + box[i+1,j] + box[i,j-1] + box[i,j+1]
+
+def jacobi(N,epsilon,y0,y1,x0,x1):
+    # Jacobi method for relaxation
+    # takes in a grid size N, an error threshold epsilon,
+    # and position data for the plates
+    # returns the relaxed array and the number of steps taken
+    
+    # generate the array that represents the potential field
+    box = np.zeros((N+1,N+1),float)
+    box[y0:y1,x0] = -1
+    box[y0:y1,x1] = 1
+    
+    # generate the array to hold the next step
+    boxprime = np.empty((N+1,N+1),float)
+    
+    k = 0
+    delta = 1.0
+    while delta >= epsilon:
+        for i in range(N+1):
+            for j in range(N+1):
+                # if the coordinate is on the edge or one of the
+                # plates, change nothing
+                if i == 0 or i == N or j == 0 or j == N or \
+                i > y0 and i < y1 and (j == x0 or j == x1):
+                    boxprime[i,j] = box[i,j]
+                # otherwise, set equal to average of nearest neighbors
+                else:
+                    boxprime[i,j] = nn(box,i,j)/4
+        delta = np.max(abs(box-boxprime))
+        box,boxprime = boxprime,box
+        k += 1
+        
+    return box, k
+
+def sor(N,epsilon,weight,y0,y1,x0,x1):
+    # Gauss-Seidel method for overrelaxation
+    # takes in a grid size N, an error threshold epsilon,
+    # a weight, and position data for the plates
+    # returns the relaxed array and the number of steps taken
+    
+    # generate the array that represents the potential field
+    box = np.zeros((N+1,N+1),float)
+    box[y0:y1,x0] = -1
+    box[y0:y1,x1] = 1
+    
+    # generate the array to hold the previous step
+    oldbox = np.empty((N+1,N+1),float)
+        
+    k = 0
+    delta = 1.0
+    while delta >= epsilon:
+        # set the previous step equal to the current step
+        oldbox[:,:] = box[:,:]
+        for i in range(N+1):
+            for j in range(N+1):
+                # if the coordinate is on the edge or one of the
+                # plates, change nothing
+                if i == 0 or i == N or j == 0 or j == N or \
+                (i > y0 and i < y1 and (j == x0 or j == x1)):
+                    continue
+                # otherwise, set it equal to the weighted average of
+                # the nearest neighbors minus the weighted self.
+                else:
+                    box[i,j] = weight*nn(box,i,j)/4 + (1-weight)*box[i,j]
+        delta = np.max(abs(box-oldbox))
+        k += 1
+
+    return box, k
+
+N = 20
+epsilon = 1e-6
+
+y0 = N//4   # sets the
+y1 = y0*3   # coordinates
+x0 = N//3   # of the
+x1 = x0*2   # plates
+
+# iterate through a span of weights, storing the weight
+# and the steps taken for that weight in a dictionary
+weights = {}
+for weight in np.linspace(1,1.5,20,True):
+    box, k = sor(N,epsilon,weight,y0,y1,x0,x1)
+    weights[weight] = k
+    print(k, ": ", weight)
+
+weight = min(weights, key=weights.get)
+
+box,k = sor(N,epsilon,weight,y0,y1,x0,x1)
+x,y = np.meshgrid(np.arange(0,N+1,1),np.arange(0,N+1,1))
+v,u = np.array(np.gradient(box))
+plt.imshow(box,cmap=plt.get_cmap('jet'))
+plt.quiver(x,y,-u,-v)
+plt.gca().invert_yaxis()
+plt.show()
